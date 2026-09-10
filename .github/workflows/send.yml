@@ -21,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      # 失败时需要把截图提交回仓库的 screenshots/ 目录，因此需要写权限
+      contents: write
     env:
       DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
       DOUYIN_CONFIG: ${{ secrets.DOUYIN_CONFIG }}
@@ -33,6 +34,13 @@ jobs:
       HEADLESS: "true"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 失败截图需要提交回仓库，完整历史可以让 git pull --rebase 更稳
+          fetch-depth: 0
+          # 默认使用 GITHUB_TOKEN 提交失败截图；如果仓库的
+          # Settings → Actions → General → Workflow permissions 是只读，
+          # 可以配置 SCREENSHOTS_TOKEN Secret（PAT，需要仓库写权限）来覆盖。
+          token: ${{ secrets.SCREENSHOTS_TOKEN || github.token }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -124,3 +132,11 @@ jobs:
           name: douyin-failure-${{ github.run_id }}
           path: artifacts/
           retention-days: 3
+      - name: Archive failure screenshots to repository
+        # 失败时把本次运行的截图提交到仓库根目录 screenshots/<时间>-run<运行ID>/
+        # 归档逻辑见 scripts/archive-screenshots.sh
+        if: failure()
+        shell: bash
+        env:
+          SCREENSHOT_KEEP: "30"
+        run: bash scripts/archive-screenshots.sh

@@ -51,6 +51,8 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
     results: list[TargetResult] = []
     screenshots: list[Path] = []
     fatal_error: Exception | None = None
+    # 供最外层异常兜底截图使用；浏览器打开失败时为 None
+    page = None
 
     try:
         # 阶段1: 打开浏览器
@@ -203,6 +205,12 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
             fatal_error = exc
             results.append(TargetResult(target="运行检查", status="failed", error=str(exc)))
             metrics.record_target_failure(type(exc).__name__)
+        # 异常逃出浏览器会话（启动失败、会话被关闭等）时补一张兜底截图，
+        # 便于 CI 把失败现场归档到仓库 screenshots/ 目录。
+        if page is not None:
+            screenshot = await _screenshot(page, settings.artifacts_dir, "run")
+            if screenshot:
+                screenshots.append(screenshot)
 
     # 完成指标统计
     metrics.total_duration_seconds = time.time() - start_time

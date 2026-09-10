@@ -729,6 +729,27 @@ traces/
 
 失败诊断 Artifact 默认保留 **3 天**。
 
+### 失败截图自动归档到仓库
+
+除 Artifacts 外，任务失败时截图还会被自动提交到仓库根目录：
+
+```text
+screenshots/20250101-120000-run1234567890/
+  README.md                            本次运行的工作流、运行链接、分支、提交
+  20250101-115959-login-3f9a1c.png     失败现场截图（多账号模式文件名带账号前缀）
+```
+
+- 直接在仓库里点开即可查看截图，不需要下载 Artifacts；
+- 每次失败生成一个 `时间-run运行ID` 目录，**只保留最近 30 次**，更早的会自动清理；
+- 提交信息为 `chore(screenshots): 归档失败截图 ...`，由 `github-actions[bot]` 推送。
+
+如果失败后提示推送截图失败（`截图归档推送失败`），说明当前仓库的 Workflow 没有写权限，按下面任一方式处理：
+
+1. 仓库 **Settings → Actions → General → Workflow permissions** 选择 **Read and write permissions** 后重新运行；
+2. 或者创建有 `contents: write` 权限的 PAT，保存为名为 `SCREENSHOTS_TOKEN` 的 Secret，workflow 会自动优先使用它。
+
+不想让截图进入仓库时，删除 `.github/workflows/send.yml` 里的 `Archive failure screenshots to repository` 步骤，并把 job 的 `permissions` 改回 `contents: read` 即可。
+
 这些文件可以帮助判断：
 
 - Cookie 是否失效；
@@ -737,7 +758,7 @@ traces/
 - 页面结构是否变化；
 - Playwright 在哪一步失败。
 
-> ⚠️ 截图和日志可能包含聊天内容或账号相关信息，请不要直接公开上传。
+> ⚠️ 截图和日志可能包含聊天内容或账号相关信息。自动归档到 `screenshots/` 的截图会写入 git 历史，如果仓库是公开的，请先确认可以接受，或者按上面的说明关闭自动归档。
 
 ---
 

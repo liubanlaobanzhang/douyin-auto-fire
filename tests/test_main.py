@@ -149,3 +149,44 @@ async def test_waits_between_consecutive_messages_for_same_friend(monkeypatch, t
     assert await main_module.run() == 0
     assert send_message.await_count == 2
     assert sleeps == [0.5]
+
+
+@pytest.mark.asyncio
+async def test_browser_session_exception_takes_fallback_screenshot(monkeypatch, tmp_path) -> None:
+    """异常逃出浏览器会话时补一张兜底截图，供 CI 归档到仓库 screenshots/ 目录。"""
+    settings = _settings(tmp_path)
+    page = MagicMock()
+    session = SimpleNamespace(page=page, context=MagicMock())
+
+    @asynccontextmanager
+    async def fake_open_douyin(_settings):
+        yield session
+
+    history = MagicMock()
+    history.run_date.return_value = "2026-08-09"
+    progress = MagicMock()
+    progress.finish_stage.side_effect = RuntimeError("进度渲染失败")
+    screenshot = AsyncMock(return_value=tmp_path / "artifacts" / "screenshots" / "run.png")
+    notify = AsyncMock()
+
+    monkeypatch.setattr(main_module, "load_settings", lambda _env=None: settings)
+    monkeypatch.setattr(main_module, "load_task", lambda _settings: _task())
+    monkeypatch.setattr(main_module, "History", MagicMock(return_value=history))
+    monkeypatch.setattr(main_module, "open_douyin", fake_open_douyin)
+    monkeypatch.setattr(
+        main_module, "create_single_run_progress", MagicMock(return_value=(progress, MagicMock()))
+    )
+    monkeypatch.setattr(main_module, "_screenshot", screenshot)
+    monkeypatch.setattr(main_module, "_write_results", MagicMock())
+    monkeypatch.setattr(main_module, "_notify_dingtalk", notify)
+    monkeypatch.setattr(main_module, "_configure_logging", lambda _path, _aliases=None: None)
+
+    with pytest.raises(RuntimeError, match="进度渲染失败"):
+        await main_module.run()
+
+    assert screenshot.await_args.args[0] is page
+    assert screenshot.await_args.args[2] == "run"
+    results = notify.await_args.args[3]
+    assert [result.status for result in results] == ["failed"]
+    assert notify.await_args.args[4] == [screenshot.return_value]
+
